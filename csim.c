@@ -5,24 +5,26 @@
 #include <string.h>
 #include <cachelab.h>
 
-tydef struct {
+typedef struct {
     unsigned valid;
     unsigned dirty;
     unsigned long tag;
     unsigned long lru;
 } Cacheline;
 
-tydef struct {
+typedef struct {
     Cacheline *lines;
 } CacheSet;
 
-tydef struct {
+typedef struct {
     CacheSet *sets;
 } Cache;
 
-Cache cache_simulator;
+Cache *cache_simulator;
 
 void initCache(unsigned long s, unsigned long E, unsigned long b) {
+    cache_simulator = (Cache *)malloc(sizeof(Cache));
+
     unsigned long no_sets = 1 << s;
     cache_simulator->set = (CacheSet *)malloc(no_sets * sizeof(CacheSet));
 
@@ -38,6 +40,14 @@ void initCache(unsigned long s, unsigned long E, unsigned long b) {
     }
 }
 
+void freeCache(unsigned long set_bits) {
+    unsigned long no_sets = 1 << set_bits;
+    for (unsigned long i = 0; i < no_sets; i++) {
+        free(cache_simulator->set[i].lines);
+    }
+    free(cache_simulator->set);
+    free(cache_simulator);
+}
 
 /** Process a memory-access trace file. *
  * @param trace Name of the trace file to process.
