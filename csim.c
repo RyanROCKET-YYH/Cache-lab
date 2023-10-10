@@ -3,6 +3,41 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <cachelab.h>
+
+tydef struct {
+    unsigned valid;
+    unsigned dirty;
+    unsigned long tag;
+    unsigned long lru;
+} Cacheline;
+
+tydef struct {
+    Cacheline *lines;
+} CacheSet;
+
+tydef struct {
+    CacheSet *sets;
+} Cache;
+
+Cache cache_simulator;
+
+void initCache(unsigned long s, unsigned long E, unsigned long b) {
+    unsigned long no_sets = 1 << s;
+    cache_simulator->set = (CacheSet *)malloc(no_sets * sizeof(CacheSet));
+
+    for (unsigned long i = 0; i < no_sets; i++) {
+        cache_simulator->set[i].lines = (Cacheline *)malloc(E * sizeof(Cacheline));
+
+        for (unsigned long j = 0; j < E; j++) {
+            cache_simulator->set[i].lines[j].valid = 0;
+            cache_simulator->set[i].lines[j].dirty = 0;
+            cache_simulator->set[i].lines[j].tag = 0;
+            cache_simulator->set[i].lines[j].lru = 0;
+        }
+    }
+}
+
 
 /** Process a memory-access trace file. *
  * @param trace Name of the trace file to process.
@@ -33,30 +68,30 @@ int process_trace_file(const char *trace) {
         if (!Op || !Addr || !Size) {
             fprintf(stderr, "Error reading trace file3\n");
             parse_error = 1;
-            return parse_error;
+            break;
         } 
         if (Junk) {
             fprintf(stderr, "Unexpected junk in trace file: %s\n", Junk);
             parse_error = 1;
-            return parse_error;
+            break;
         }
         if (Op != 'L' && Op != 'S') {
             fprintf(stderr, "Invalid operation in trace file\n");
             parse_error = 1;
-            return parse_error;
+            break;
         } 
         char *endptr;
         unsigned long address = strtoul(Addr, &endptr, 16);
         if (Addr == endptr || *endptr != '\0') {
             fprintf(stderr, "Error reading trace file-address\n");
             parse_error = 1;
-            return parse_error;
+            break;
         }
         unsigned int size = strtoul(Size, &endptr, 10);
         if (Size == endptr || *endptr != '\0') {
             fprintf(stderr, "Error reading trace file-size\n");
             parse_error = 1;
-            return parse_error;
+            break;
         }
 
         printf("Op: %c, Addr: %lx, Size: %u\n", Op, address, size);
