@@ -37,7 +37,7 @@ void initCache(unsigned long s, unsigned long E, unsigned long b) {
     unsigned long no_sets = 1 << s;
     cache_simulator->sets = (CacheSet *)malloc(no_sets * sizeof(CacheSet));
     if (cache_simulator->sets == NULL) {
-        fprintf(stderr, "Memmory allocation failed for cache_simulator!\n");
+        fprintf(stderr, "Memmory allocation failed for cache_simulator->sets!\n");
         exit(1);
     }
 
@@ -46,7 +46,7 @@ void initCache(unsigned long s, unsigned long E, unsigned long b) {
         cache_simulator->sets[i].line_index = 0;
        
         if (cache_simulator->sets[i].lines == NULL) {
-            fprintf(stderr, "Memmory allocation failed for cache_simulator!\n");
+            fprintf(stderr, "Memmory allocation failed for cache_simulator->sets.lines!\n");
             exit(1);
         }
 
@@ -157,8 +157,8 @@ void update_cache(unsigned long address, unsigned long set_bits, unsigned long b
 int process_trace_file(const char *trace, unsigned long set_bits, unsigned long block_bits, unsigned long lines_no, bool verbose) {
     FILE *tfp = fopen(trace, "rt"); 
     if (!tfp) {
-        fprintf(stderr, "Error opening trace file1\n");
-        return 1;
+        fprintf(stderr, "Error opening trace file\n");
+        exit(1);
     }
     size_t LINELEN = 25; // 1+1+16+4+1+1+1 = 25
     char linebuf[LINELEN]; // How big should LINELEN be? 
@@ -167,7 +167,7 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
         // Parse the line of text in ’linebuf’.
         size_t len = strlen(linebuf);
         if (len == LINELEN - 1 && linebuf[len - 1] != '\n') {
-            fprintf(stderr, "Error reading trace file2\n");
+            fprintf(stderr, "Error reading trace file: line reads over threshold\n");
             exit(1);
         }
 
@@ -176,7 +176,7 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
         char *Size = strtok(NULL, "\n\t\r "); // size, terminate at \n\t\r and space 
         char *Junk = strtok(NULL, "\n\t\r ");
         if (!Op || !Addr || !Size) {
-            fprintf(stderr, "Error reading trace file3\n");
+            fprintf(stderr, "Error reading trace file: missing element in instruction\n");
             exit(1);
         } 
         if (Junk) {
