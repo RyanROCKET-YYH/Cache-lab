@@ -168,8 +168,7 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
         size_t len = strlen(linebuf);
         if (len == LINELEN - 1 && linebuf[len - 1] != '\n') {
             fprintf(stderr, "Error reading trace file2\n");
-            parse_error = 1;
-            return parse_error;
+            exit(1);
         }
 
         char Op = linebuf[0];   // read Op which is always 1st bit
@@ -178,31 +177,26 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
         char *Junk = strtok(NULL, "\n\t\r ");
         if (!Op || !Addr || !Size) {
             fprintf(stderr, "Error reading trace file3\n");
-            parse_error = 1;
-            break;
+            exit(1);
         } 
         if (Junk) {
             fprintf(stderr, "Unexpected junk in trace file: %s\n", Junk);
-            parse_error = 1;
-            break;
+            exit(1);
         }
         if (Op != 'L' && Op != 'S') {
             fprintf(stderr, "Invalid operation in trace file\n");
-            parse_error = 1;
-            break;
+            exit(1);
         } 
         char *endptr;
         unsigned long address = strtoul(Addr, &endptr, 16);
         if (Addr == endptr || *endptr != '\0') {
             fprintf(stderr, "Error reading trace file-address\n");
-            parse_error = 1;
-            break;
+            exit(1);
         }
         unsigned long size = strtoul(Size, &endptr, 10);
         if (Size == endptr || *endptr != '\0') {
             fprintf(stderr, "Error reading trace file-size\n");
-            parse_error = 1;
-            break;
+            exit(1);
         }
         if (verbose) {
             printf("%c %lx,%lu", Op, address, size);
@@ -298,8 +292,6 @@ int main(int argc, char **argv) {
         printf("Error: s + b is too large (s = %lu, b = %lu)\n",set_bits, block_bits);
         exit(1);
     } 
-
-    printf("s:%lu, E:%lu, b:%lu\n", set_bits, lines_no, block_bits);
     initCache(set_bits, lines_no, block_bits);
     process_trace_file(trace, set_bits, block_bits, lines_no, verbose);
     freeCache(set_bits);
