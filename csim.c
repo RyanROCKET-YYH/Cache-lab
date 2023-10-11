@@ -5,8 +5,8 @@
 #include <string.h>
 #include "cachelab.h"
 
-unsigned long timestamp = 0;
-csim_stats_t *stats = {0};
+csim_stats_t *stats;
+unsigned long timeStamp = 0;
 
 typedef struct {
     unsigned valid;
@@ -17,6 +17,7 @@ typedef struct {
 
 typedef struct {
     Cacheline *lines;
+    unsigned long line_index;
 } CacheSet;
 
 typedef struct {
@@ -27,12 +28,26 @@ Cache *cache_simulator;
 
 void initCache(unsigned long s, unsigned long E, unsigned long b) {
     cache_simulator = (Cache *)malloc(sizeof(Cache));
+    if (cache_simulator == NULL) {
+        fprintf(stderr, "Memory allocation failed for cache_simulator!\n");
+        exit(1);
+    }
 
     unsigned long no_sets = 1 << s;
     cache_simulator->sets = (CacheSet *)malloc(no_sets * sizeof(CacheSet));
+    if (cache_simulator->sets == NULL) {
+        fprintf(stderr, "Memmory allocation failed for cache_simulator!\n");
+        exit(1);
+    }
 
     for (unsigned long i = 0; i < no_sets; i++) {
         cache_simulator->sets[i].lines = (Cacheline *)malloc(E * sizeof(Cacheline));
+        cache_simulator->sets[i].line_index = 0;
+       
+        if (cache_simulator->sets[i].lines == NULL) {
+            fprintf(stderr, "Memmory allocation failed for cache_simulator!\n");
+            exit(1);
+        }
 
         for (unsigned long j = 0; j < E; j++) {
             cache_simulator->sets[i].lines[j].valid = 0;
@@ -55,40 +70,75 @@ void freeCache(unsigned long set_bits) {
 void update_cacheline(Cacheline *line, unsigned long tag_index, char Op) {
     line->valid = 1;
     line->tag = tag_index;
-    line->lru = timestamp++;
-    if (Op == 'S') {
-        line->dirty = 1;
+    line->lru = timeStamp++;
+}
+
+unsigned long line2replace(CacheSet *set, unsigned long lines_no) {
+    unsigned long lru_index = 0;
+    unsigned long min_lru = set->lines[0].lru;
+    for (unsigned long i = 0; i < lines_no; i++) {
+        if (min_lru > set->lines[i].lru) {
+            min_lru = set->lines[i].lru;
+            lru_index = i;
+        }
     }
+    return lru_index;
 }
 
-unsigned long line2replace(CacheSet *set, ) {
-    return 0
-}
-
-void update_cache(unsigned long address, unsigned long set_bits, unsigned long block_bits, unsigned long lines_no, char Op) {
+void update_cache(unsigned long address, unsigned long set_bits, unsigned long block_bits, unsigned long lines_no, char Op, bool verbose) {
    // transform address into set and tag
     unsigned long set_index = (address >> block_bits) & (((unsigned long) -1) >> (64 - set_bits));
     unsigned long tag_index = (address >> (block_bits + set_bits));
     
     CacheSet *target_set = &(cache_simulator->sets[set_index]);
-
     bool hit = false;
     for (unsigned long i = 0; i < lines_no; i++) {
         Cacheline *line = &(target_set->lines[i]);
         if (line->valid == 1 && line->tag == tag_index) {
-            stats.hits++;
-            line->lru = timestamp++;
+            stats->hits++;
+            line->lru = timeStamp++;
             hit = true;
             if (Op == 'S') {
-                line->dirty = 1;
+                if (line->dirty != 1) {
+                    line->dirty = 1;
+                    stats->dirty_bytes += (1 << block_bits);
+                }
             }
-            printf("$lu",stats->hits);
+            if (verbose) {
+                printf(" hit\n");
+            }
+            //printf("hits:%lu\n",stats->hits);
+            //printf("dirty_bytes:%lu\n",stats->dirty_bytes);
             break;
         }
     }
     
     if (!hit) {
-        printf("no hit record\n");
+        stats->misses++;
+        //printf("misses:%lu\n",stats->misses);
+        if ((target_set->line_index) < lines_no) {
+            Cacheline *line = &(target_set->lines[target_set->line_index]);
+            update_cacheline(line, tag_index, Op);
+            target_set->line_index++;
+            if (verbose) {
+                printf(" miss\n");
+            }
+        } else {
+            unsigned long lru_index = line2replace(target_set, lines_no);
+            update_cacheline(&(target_set->lines[lru_index]), tag_index, Op);
+            target_set->lines[lru_index].lru = timeStamp++;
+            stats->evictions++;
+            if (target_set->lines[lru_index].dirty) {
+                stats->dirty_evictions += (1 << block_bits);
+                stats->dirty_bytes -= (1 << block_bits);
+                target_set->lines[lru_index].dirty = 0;
+          //      printf("dirty_evictions:%lu\n",stats->dirty_evictions);
+            }
+            if (verbose) {
+                printf(" miss evicition\n");
+            }
+            //printf("evictions:%lu\n",stats->evictions);
+        }
     }
 }
 
@@ -96,7 +146,7 @@ void update_cache(unsigned long address, unsigned long set_bits, unsigned long b
  * @param trace Name of the trace file to process.
  * @return 0 if successful, 1 if there were errors.
  */
-int process_trace_file(const char *trace, unsigned long set_bits, unsigned long block_bits, unsigned long lines_no) {
+int process_trace_file(const char *trace, unsigned long set_bits, unsigned long block_bits, unsigned long lines_no, bool verbose) {
     FILE *tfp = fopen(trace, "rt"); 
     if (!tfp) {
         fprintf(stderr, "Error opening trace file1\n");
@@ -146,12 +196,12 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
             parse_error = 1;
             break;
         }
-
-        printf("Op: %c, Addr: %lx, Size: %u\n", Op, address, size);
-        update_cache(address, set_bits, block_bits, lines_no, Op);
+        if (verbose) {
+            printf("%c %lx,%u", Op, address, size);
+        }
+        update_cache(address, set_bits, block_bits, lines_no, Op, verbose);
     }
     fclose(tfp);
-
     return parse_error;
 }
 
@@ -169,9 +219,21 @@ void helpMessage() {
 
 int main(int argc, char **argv) {
     int opt;
+    bool verbose = false;
     int s_flag=0, b_flag=0, E_flag=0, t_flag=0;
     unsigned long set_bits=0, block_bits=0,lines_no=0;
     char *trace = NULL;
+    stats = (csim_stats_t *)malloc(sizeof(csim_stats_t));
+    if (stats == NULL) {
+        fprintf(stderr, "Memory allocation failed for stats!\n");
+        exit(1);
+    }
+
+    stats->hits = 0;
+    stats->misses = 0;
+    stats->evictions = 0;
+    stats->dirty_bytes = 0;
+    stats->dirty_evictions = 0;
 
     while ((opt = getopt(argc, argv, "hvs:b:E:t:")) != -1) {
         switch (opt) {
@@ -179,7 +241,7 @@ int main(int argc, char **argv) {
                 helpMessage();
                 exit(0);
             case 'v':
-                //printf("it si in verbose mode");
+                verbose = true;
                 break;
             case 's':
                 s_flag = 1;
@@ -231,7 +293,9 @@ int main(int argc, char **argv) {
     } 
 
     initCache(set_bits, lines_no, block_bits);
-    process_trace_file(trace, set_bits, lines_no, block_bits);
+    process_trace_file(trace, set_bits, block_bits, lines_no, verbose);
     freeCache(set_bits);
+    printSummary(stats);
+    free(stats);
     return 0;
 }
