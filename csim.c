@@ -5,6 +5,9 @@
 #include <string.h>
 #include "cachelab.h"
 
+unsigned long timestamp = 0;
+csim_stats_t *stats = {0};
+
 typedef struct {
     unsigned valid;
     unsigned dirty;
@@ -49,13 +52,51 @@ void freeCache(unsigned long set_bits) {
     free(cache_simulator);
 }
 
+void update_cacheline(Cacheline *line, unsigned long tag_index, char Op) {
+    line->valid = 1;
+    line->tag = tag_index;
+    line->lru = timestamp++;
+    if (Op == 'S') {
+        line->dirty = 1;
+    }
+}
 
+unsigned long line2replace(CacheSet *set, ) {
+    return 0
+}
+
+void update_cache(unsigned long address, unsigned long set_bits, unsigned long block_bits, unsigned long lines_no, char Op) {
+   // transform address into set and tag
+    unsigned long set_index = (address >> block_bits) & (((unsigned long) -1) >> (64 - set_bits));
+    unsigned long tag_index = (address >> (block_bits + set_bits));
+    
+    CacheSet *target_set = &(cache_simulator->sets[set_index]);
+
+    bool hit = false;
+    for (unsigned long i = 0; i < lines_no; i++) {
+        Cacheline *line = &(target_set->lines[i]);
+        if (line->valid == 1 && line->tag == tag_index) {
+            stats.hits++;
+            line->lru = timestamp++;
+            hit = true;
+            if (Op == 'S') {
+                line->dirty = 1;
+            }
+            printf("$lu",stats->hits);
+            break;
+        }
+    }
+    
+    if (!hit) {
+        printf("no hit record\n");
+    }
+}
 
 /** Process a memory-access trace file. *
  * @param trace Name of the trace file to process.
  * @return 0 if successful, 1 if there were errors.
  */
-int process_trace_file(const char *trace) {
+int process_trace_file(const char *trace, unsigned long set_bits, unsigned long block_bits, unsigned long lines_no) {
     FILE *tfp = fopen(trace, "rt"); 
     if (!tfp) {
         fprintf(stderr, "Error opening trace file1\n");
@@ -107,6 +148,7 @@ int process_trace_file(const char *trace) {
         }
 
         printf("Op: %c, Addr: %lx, Size: %u\n", Op, address, size);
+        update_cache(address, set_bits, block_bits, lines_no, Op);
     }
     fclose(tfp);
 
@@ -188,6 +230,8 @@ int main(int argc, char **argv) {
         exit(1);
     } 
 
-    process_trace_file(trace);
+    initCache(set_bits, lines_no, block_bits);
+    process_trace_file(trace, set_bits, lines_no, block_bits);
+    freeCache(set_bits);
     return 0;
 }
