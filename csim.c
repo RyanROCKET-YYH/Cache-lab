@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <string.h>
 #include "cachelab.h"
+#include <getopt.h>
 
 csim_stats_t *stats;
 unsigned long timeStamp = 0;
@@ -71,6 +72,11 @@ void update_cacheline(Cacheline *line, unsigned long tag_index, char Op) {
     line->valid = 1;
     line->tag = tag_index;
     line->lru = timeStamp++;
+    if (Op == 'S') {
+        line->dirty = 1;
+    } else {
+        line->dirty = 0;
+    }
 }
 
 unsigned long line2replace(CacheSet *set, unsigned long lines_no) {
@@ -89,7 +95,9 @@ void update_cache(unsigned long address, unsigned long set_bits, unsigned long b
    // transform address into set and tag
     unsigned long set_index = (address >> block_bits) & (((unsigned long) -1) >> (64 - set_bits));
     unsigned long tag_index = (address >> (block_bits + set_bits));
-    
+    if (set_bits == 0){
+        set_index = 0;
+    }
     CacheSet *target_set = &(cache_simulator->sets[set_index]);
     bool hit = false;
     for (unsigned long i = 0; i < lines_no; i++) {
@@ -105,39 +113,39 @@ void update_cache(unsigned long address, unsigned long set_bits, unsigned long b
                 }
             }
             if (verbose) {
-                printf(" hit\n");
+                printf(" hit dirty_bytes:%lu\n", stats->dirty_bytes);
             }
-            //printf("hits:%lu\n",stats->hits);
-            //printf("dirty_bytes:%lu\n",stats->dirty_bytes);
             break;
         }
     }
     
     if (!hit) {
         stats->misses++;
-        //printf("misses:%lu\n",stats->misses);
         if ((target_set->line_index) < lines_no) {
             Cacheline *line = &(target_set->lines[target_set->line_index]);
             update_cacheline(line, tag_index, Op);
+            if (line->dirty == 1) {
+                stats->dirty_bytes += (1 << block_bits);
+            }
             target_set->line_index++;
             if (verbose) {
-                printf(" miss\n");
+                printf(" miss dirty_bytes:%lu\n", stats->dirty_bytes);
             }
         } else {
             unsigned long lru_index = line2replace(target_set, lines_no);
-            update_cacheline(&(target_set->lines[lru_index]), tag_index, Op);
-            target_set->lines[lru_index].lru = timeStamp++;
-            stats->evictions++;
-            if (target_set->lines[lru_index].dirty) {
+            if (target_set->lines[lru_index].dirty == 1) {
                 stats->dirty_evictions += (1 << block_bits);
                 stats->dirty_bytes -= (1 << block_bits);
-                target_set->lines[lru_index].dirty = 0;
-          //      printf("dirty_evictions:%lu\n",stats->dirty_evictions);
+            } 
+            update_cacheline(&(target_set->lines[lru_index]), tag_index, Op);
+            if (target_set->lines[lru_index].dirty == 1) {
+                stats->dirty_bytes += (1 << block_bits);
             }
+            target_set->lines[lru_index].lru = timeStamp++;
+            stats->evictions++;
             if (verbose) {
-                printf(" miss evicition\n");
+                printf(" miss evicition dirty_bytes:%lu evicted:%lu\n", stats->dirty_bytes, stats->dirty_evictions);
             }
-            //printf("evictions:%lu\n",stats->evictions);
         }
     }
 }
@@ -152,10 +160,10 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
         fprintf(stderr, "Error opening trace file1\n");
         return 1;
     }
-    int LINELEN = 25; // 1+1+16+4+1+1+1 = 25
+    size_t LINELEN = 25; // 1+1+16+4+1+1+1 = 25
     char linebuf[LINELEN]; // How big should LINELEN be? 
     int parse_error = 0;
-    while (fgets(linebuf, LINELEN, tfp)) {
+    while (fgets(linebuf, (int)LINELEN, tfp)) {
         // Parse the line of text in ’linebuf’.
         size_t len = strlen(linebuf);
         if (len == LINELEN - 1 && linebuf[len - 1] != '\n') {
@@ -190,14 +198,14 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
             parse_error = 1;
             break;
         }
-        unsigned int size = strtoul(Size, &endptr, 10);
+        unsigned long size = strtoul(Size, &endptr, 10);
         if (Size == endptr || *endptr != '\0') {
             fprintf(stderr, "Error reading trace file-size\n");
             parse_error = 1;
             break;
         }
         if (verbose) {
-            printf("%c %lx,%u", Op, address, size);
+            printf("%c %lx,%lu", Op, address, size);
         }
         update_cache(address, set_bits, block_bits, lines_no, Op, verbose);
     }
@@ -205,7 +213,7 @@ int process_trace_file(const char *trace, unsigned long set_bits, unsigned long 
     return parse_error;
 }
 
-void helpMessage() {
+void helpMessage(void) {
     printf("Usage: ./csim -ref [-v] -s <s> -E <E> -b <b> -t <trace >\n");
     printf("       ./csim -ref -h\n");
     printf("     -h          Print this help message and exit\n");
@@ -214,7 +222,6 @@ void helpMessage() {
     printf("     -b <b>      Number of block bits (there are 2**b blocks)\n");
     printf("     -E <E>      Number of lines per set (associativity)\n");
     printf("     -t <trace>  File name of the memory trace to process\n");
-
 }
 
 int main(int argc, char **argv) {
@@ -292,6 +299,7 @@ int main(int argc, char **argv) {
         exit(1);
     } 
 
+    printf("s:%lu, E:%lu, b:%lu\n", set_bits, lines_no, block_bits);
     initCache(set_bits, lines_no, block_bits);
     process_trace_file(trace, set_bits, block_bits, lines_no, verbose);
     freeCache(set_bits);
