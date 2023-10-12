@@ -326,7 +326,7 @@ void update_cache(unsigned long address, unsigned long set_bits,
  * @param set_bits The number of set index bit from command.
  * @param block_bits The number of block index bit from command.
  * @param lines_no Total number of lines per set.
- * @param verbose Flag of verbose outputs. 
+ * @param verbose Flag of verbose outputs.
  * @return 0 if successful, 1 if there were errors.
  */
 int process_trace_file(const char *trace, unsigned long set_bits,

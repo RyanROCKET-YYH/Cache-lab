@@ -26,7 +26,7 @@
  *     other tricks to hide array data in other forms of local or global memory.
  *
  * TODO: fill in your name and Andrew ID below.
- * @author Your Name <andrewid@andrew.cmu.edu>
+ * @author Yuhong YAO <yuhongy>
  */
 
 #include <assert.h>
@@ -93,6 +93,30 @@ static void trans_basic(size_t M, size_t N, double A[N][M], double B[M][N],
 }
 
 /**
+ * @brief A simple baseline transpose function, not optimized for the cache.
+ *
+ * Note the use of asserts (defined in assert.h) that add checking code.
+ * These asserts are disabled when measuring cycle counts (i.e. when running
+ * the ./test-trans) to avoid affecting performance.
+ */
+static void trans_student(size_t M, size_t N, double A[N][M], double B[M][N], double tmp[TMPCOUNT]) {
+    assert(M > 0);
+    assert(N > 0);
+
+    const size_t block_size = 8;
+
+    for (size_t ii = 0; ii < N; ii += block_size) {
+        for (size_t jj = 0; jj < M; jj += block_size) {
+            for (size_t i = ii; i < ii+block_size; i++) {
+                for (size_t j = jj; j < jj+block_size; j++) {
+                    B[j][i] = A[i][j];
+                }
+            }
+        }
+    }
+    assert(is_transpose(M, N, A, B));
+}
+/**
  * @brief A contrived example to illustrate the use of the temporary array.
  *
  * This function uses the first four elements of tmp as a 2x2 array with
@@ -125,7 +149,7 @@ static void trans_tmp(size_t M, size_t N, double A[N][M], double B[M][N],
 static void transpose_submit(size_t M, size_t N, double A[N][M], double B[M][N],
                              double tmp[TMPCOUNT]) {
     if (M == N)
-        trans_basic(M, N, A, B, tmp);
+        trans_student(M, N, A, B, tmp);
     else
         trans_tmp(M, N, A, B, tmp);
 }
@@ -144,4 +168,5 @@ void registerFunctions(void) {
     // Register any additional transpose functions
     registerTransFunction(trans_basic, "Basic transpose");
     registerTransFunction(trans_tmp, "Transpose using the temporary array");
+    registerTransFunction(trans_student, "Student transpose");
 }
