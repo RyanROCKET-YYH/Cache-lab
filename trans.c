@@ -99,6 +99,7 @@ static void trans_basic(size_t M, size_t N, double A[N][M], double B[M][N],
  * These asserts are disabled when measuring cycle counts (i.e. when running
  * the ./test-trans) to avoid affecting performance.
  */
+
 static void trans_student(size_t M, size_t N, double A[N][M], double B[M][N], double tmp[TMPCOUNT]) {
     assert(M > 0);
     assert(N > 0);
@@ -107,15 +108,31 @@ static void trans_student(size_t M, size_t N, double A[N][M], double B[M][N], do
 
     for (size_t ii = 0; ii < N; ii += block_size) {
         for (size_t jj = 0; jj < M; jj += block_size) {
-            for (size_t i = ii; i < ii+block_size; i++) {
-                for (size_t j = jj; j < jj+block_size; j++) {
-                    B[j][i] = A[i][j];
+            if (ii == jj) {
+                for (size_t i = ii; i < ii + block_size; i++) {
+                    for (size_t j = jj; j < jj + block_size; j++) {
+                        tmp[(i-ii)*block_size + (j-jj) + block_size] = A[i][j];
+                    }
+                }
+                for (size_t i = ii; i < ii + block_size; i++) {
+                    for (size_t j = jj; j < jj + block_size; j++) {
+                        B[j][i]= tmp[(i-ii)*block_size + (j-jj) + block_size];
+                    }
+                }
+            } else {
+                // For non-diagonal blocks
+                for (size_t i = ii; i < ii + block_size; i++) {
+                    for (size_t j = jj; j < jj + block_size; j++) {
+                        B[j][i] = A[i][j];
+                    }
                 }
             }
         }
     }
     assert(is_transpose(M, N, A, B));
 }
+   
+
 /**
  * @brief A contrived example to illustrate the use of the temporary array.
  *
