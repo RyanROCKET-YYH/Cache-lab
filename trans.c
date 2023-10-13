@@ -93,14 +93,26 @@ static void trans_basic(size_t M, size_t N, double A[N][M], double B[M][N],
 }
 
 /**
- * @brief A simple baseline transpose function, not optimized for the cache.
+ * @brief A simple transpose function, optimized for the cache using blocking.
  *
- * Note the use of asserts (defined in assert.h) that add checking code.
- * These asserts are disabled when measuring cycle counts (i.e. when running
- * the ./test-trans) to avoid affecting performance.
+ * The transpose function is optimized for cache using a blocking strategy.
+ * The basic idea is to decompose the matrix into blocks of size block_size x
+ * block_size and then transpose each block.
+ *
+ * The function handles the elements in two cases:
+ * 1. Non-diagonal elements: These are directly transposed from matrix A to B.
+ * 2. Diagonal elements: These are first stored in the tmp array and then write
+ * to matrix B.
+ *
+ *
+ * The choice of the offset (`i - ii + 64`) for tmp is strategic, designed to
+ * reduce potential cache conflicts between tmp, A, and B.
+ *
+ * The blocking startegy is cited from hint section.
  * citation:  http://csapp.cs.cmu.edu/public/waside/waside-blocking.pdf
  */
-static void trans_student(size_t M, size_t N, double A[N][M], double B[M][N], double tmp[TMPCOUNT]) {
+static void trans_student(size_t M, size_t N, double A[N][M], double B[M][N],
+                          double tmp[TMPCOUNT]) {
     assert(M > 0);
     assert(N > 0);
 
@@ -117,7 +129,7 @@ static void trans_student(size_t M, size_t N, double A[N][M], double B[M][N], do
                     }
                 }
                 if (ii == jj && i < M) {
-                    B[i][i] = tmp [i - ii + 64];
+                    B[i][i] = tmp[i - ii + 64];
                 }
             }
         }
@@ -125,8 +137,18 @@ static void trans_student(size_t M, size_t N, double A[N][M], double B[M][N], do
     assert(is_transpose(M, N, A, B));
 }
 
-
-static void trans_1024(size_t M, size_t N, double A[N][M], double B[M][N], double tmp[TMPCOUNT]) {
+/**
+ * @brief This is only dealing with 1024x1024 matrix in order to get better
+ * performance.
+ *
+ * This is a midway checkpoint when I am optimizing the transpose and I found it
+ * has the min cycles for 1024 matrix.
+ *
+ * The blocking startegy is cited from hint section.
+ * citation:  http://csapp.cs.cmu.edu/public/waside/waside-blocking.pdf
+ */
+static void trans_1024(size_t M, size_t N, double A[N][M], double B[M][N],
+                       double tmp[TMPCOUNT]) {
     assert(M == 1024);
     assert(N == 1024);
 
@@ -137,12 +159,12 @@ static void trans_1024(size_t M, size_t N, double A[N][M], double B[M][N], doubl
             if (ii == jj) {
                 for (size_t i = ii; i < ii + block_size; i++) {
                     for (size_t j = jj; j < jj + block_size; j++) {
-                        tmp[(i-ii)*block_size + (j-jj)] = A[i][j];
+                        tmp[(i - ii) * block_size + (j - jj)] = A[i][j];
                     }
                 }
                 for (size_t j = jj; j < jj + block_size; j++) {
                     for (size_t i = ii; i < ii + block_size; i++) {
-                        B[j][i] = tmp[(i-ii)*block_size + (j-jj)];
+                        B[j][i] = tmp[(i - ii) * block_size + (j - jj)];
                     }
                 }
             } else {
@@ -156,7 +178,6 @@ static void trans_1024(size_t M, size_t N, double A[N][M], double B[M][N], doubl
     }
     assert(is_transpose(M, N, A, B));
 }
-   
 
 /**
  * @brief A contrived example to illustrate the use of the temporary array.
@@ -190,8 +211,8 @@ static void trans_tmp(size_t M, size_t N, double A[N][M], double B[M][N],
  */
 static void transpose_submit(size_t M, size_t N, double A[N][M], double B[M][N],
                              double tmp[TMPCOUNT]) {
-    if (M == N && M == 1024){
-        trans_1024(M,N,A,B,tmp);
+    if (M == N && M == 1024) {
+        trans_1024(M, N, A, B, tmp);
     } else {
         trans_student(M, N, A, B, tmp);
     }
@@ -211,5 +232,5 @@ void registerFunctions(void) {
     // Register any additional transpose functions
     registerTransFunction(trans_basic, "Basic transpose");
     registerTransFunction(trans_tmp, "Transpose using the temporary array");
-    //registerTransFunction(trans_student, "Student transpose");
+    // registerTransFunction(trans_student, "Student transpose");
 }
