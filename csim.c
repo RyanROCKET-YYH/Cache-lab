@@ -341,7 +341,6 @@ int process_trace_file(const char *trace, unsigned long set_bits,
     char linebuf[LINELEN]; // How big should LINELEN be?
     int parse_error = 0;
     while (fgets(linebuf, (int)LINELEN, tfp)) {
-        // Parse the line of text in ’linebuf’.
         size_t len = strlen(linebuf);
         if (len == LINELEN - 1 && linebuf[len - 1] != '\n') {
             fprintf(stderr,
@@ -349,8 +348,8 @@ int process_trace_file(const char *trace, unsigned long set_bits,
             exit(1);
         }
 
-        char Op = linebuf[0]; // read Op which is always 1st bit
-        char *Addr = strtok(&linebuf[2], ","); // address, terminate at ,
+        char Op = linebuf[0];
+        char *Addr = strtok(&linebuf[2], ",");
         char *Size =
             strtok(NULL, "\n\t\r "); // size, terminate at \n\t\r and space
         char *Junk = strtok(NULL, "\n\t\r ");
